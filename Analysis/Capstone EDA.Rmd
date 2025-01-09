@@ -1,0 +1,1001 @@
+---
+title: "Capstone"
+author: "Quang Nhut Ly"
+date: "2024-10-23"
+output: html_document
+---
+```{r}
+# Load necessary libraries
+library(dplyr)
+library(ggplot2)
+library(forcats)
+library(tidyr)
+```
+
+
+```{r}
+#load NEISS data
+NEISS <- read.csv("D:/MERCER/Sem 3/Capstone/NEISS.csv")
+summary(NEISS)
+```
+
+```{r}
+# Convert Treatment_Date to Date format
+NEISS$Treatment_Date <- as.Date(NEISS$Treatment_Date)
+
+# Remove the CPSC_Case_Number column
+NEISS <- NEISS[ , !names(NEISS) %in% "CPSC_Case_Number"]
+
+#Tranform variable to factor
+
+NEISS[, c("Body_Part","Sex","Race","Hispanic", "Diagnosis", "Body_Part_2", "Diagnosis_2", "Disposition", 
+          "Fire_Involvement", "Product_1", "Product_2", "Product_3", 
+          "Alcohol", "Drug", "Stratum", "PSU", "Weight")] <- 
+  lapply(NEISS[, c("Body_Part","Sex","Race","Hispanic", "Diagnosis", "Body_Part_2", "Diagnosis_2", "Disposition", 
+          "Fire_Involvement", "Product_1", "Product_2", "Product_3", 
+          "Alcohol", "Drug", "Stratum", "PSU", "Weight")], as.factor)
+summary(NEISS)
+```
+
+
+```{r}
+# Remove rows where Age is 0 (Age not recorded)
+NEISS <- NEISS[NEISS$Age != 0, ]
+
+# Convert ages between 201 and 211 (1 to 11 months) to 0 year, between 212 and 223 (12 to 23 months) to 1 year
+NEISS$Age[NEISS$Age >= 201 & NEISS$Age <= 211] <- 0
+NEISS$Age[NEISS$Age >= 212 & NEISS$Age <= 223] <- 1
+
+# Plot the distribution of Age
+ggplot(NEISS, aes(x = Age)) +
+  geom_histogram(binwidth = 1, fill = "skyblue", color = "black") +
+  labs(title = "Distribution of Age in NEISS Dataset", x = "Age", y = "Frequency") +
+  theme_minimal()
+
+# Plot a boxplot for Age
+ggplot(NEISS, aes(y = Age)) +
+  geom_boxplot(fill = "lightblue", color = "darkblue") +
+  labs(title = "Boxplot of Age in NEISS Dataset", y = "Age") +
+  theme_minimal()
+
+```
+
+```{r}
+NEISS$AgeGroup <- cut(
+  NEISS$Age,
+  breaks = c(-Inf, 1, 5, 12, 17, 24, 44, 64, Inf),
+  labels = c(
+    "Infants (0-1)",
+    "Young Children (2-5)",
+    "Children (6-12)",
+    "Teenagers (13-17)",
+    "Young Adults (18-24)",
+    "Adults (25-44)",
+    "Middle-Aged Adults (45-64)",
+    "Senior Adults (65+)"
+  ),
+  right = TRUE
+)
+
+
+# Summarize data by age group
+age_group_summary <- as.data.frame(table(NEISS$AgeGroup))
+colnames(age_group_summary) <- c("Age Group", "Count")
+
+# Add percentages
+age_group_summary$Percentage <- round((age_group_summary$Count / sum(age_group_summary$Count)) * 100, 2)
+
+# Print the grouped table
+print(age_group_summary)
+
+# Calculate count and percentage for each AgeGroup
+age_group_summary <- NEISS %>%
+  group_by(AgeGroup) %>%
+  summarise(Count = n()) %>%
+  mutate(Percentage = Count / sum(Count) * 100)
+
+# Print the table
+age_group_summary
+
+# Plot the distribution of AgeGroup
+ggplot(NEISS, aes(x = AgeGroup, fill = AgeGroup)) +
+  geom_bar() +
+  labs(title = "Distribution of Age Groups in NEISS Dataset", x = "Age Group", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +  # Rotate x-axis labels for readability
+  scale_fill_brewer(palette = "Set3")                         # Use a color palette for distinction
+
+```
+
+
+```{r}
+# Remove rows where Sex is 0 (Not Recorded) or 3 (Non-Binary/Other (NA before 2021))
+NEISS <- NEISS[NEISS$Sex != 0 & NEISS$Sex != 3, ]
+
+# Replace Sex values: 1 -> "Male", 2 -> "Female"
+NEISS$Sex <- ifelse(NEISS$Sex == 1, "Male", "Female")
+
+# Plot the distribution of Sex as a pie chart
+ggplot(NEISS, aes(x = "", fill = Sex)) +
+  geom_bar(stat = "count", width = 1) +  # Create a bar chart with width 1 for pie-like appearance
+  coord_polar(theta = "y") +              # Convert to pie chart
+  labs(title = "Contribution of Sex in NEISS Dataset") +
+  scale_fill_manual(values = c("Male" = "skyblue", "Female" = "pink")) +
+  theme_void() +                          # Remove axis labels and background
+  theme(legend.position = "bottom")       # Position the legend at the bottom
+
+summary(NEISS)
+```
+
+
+```{r}
+
+# Replace numeric codes with descriptive labels in Race column, grouping American Indian/Alaska Native, Native Hawaiian/Pacific Islander and Other to Others
+NEISS <- NEISS %>%
+  mutate(Race = recode(Race,
+                       `0` = "Not Stated",
+                       `1` = "White",
+                       `2` = "Black",
+                       `3` = "Others",
+                       `4` = "Asian",
+                       `5` = "Others",
+                       `6` = "Others"))
+
+# Plot the distribution of Race
+ggplot(NEISS, aes(x = fct_infreq(Race), fill = Race)) +
+  geom_bar() +
+  labs(title = "Distribution of Race in NEISS Dataset", x = "Race", y = "Count") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set3") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Create a table with count and percentage for Race in the NEISS dataset
+race_distribution_NEISS <- NEISS %>%
+  group_by(Race) %>%                         # Group by Race
+  summarise(Count = n(), .groups = 'drop') %>%   # Count occurrences
+  mutate(Percentage = (Count / sum(Count)) * 100) %>%  # Calculate percentage
+  arrange(desc(Count))                           # Sort by count in descending order
+
+# Display the Location table for the entire dataset
+print(race_distribution_NEISS)
+```
+```{r}
+# Replace numeric codes in the Hispanic column with descriptive labels
+NEISS$Hispanic <- factor(NEISS$Hispanic,
+                         levels = c(0, 1, 2),
+                         labels = c("Unknown", "Yes", "No"))
+
+# Verify the changes
+table(NEISS$Hispanic)
+```
+```{r}
+# Group and decode the Disposition column
+NEISS$Disposition <- factor(NEISS$Disposition,
+                             levels = c(1, 2, 4, 5, 6, 8, 9),
+                             labels = c("Released",         # 1 - Treated/Examined and Released
+                                        "Hospitalized",     # 2 - Treated and Transferred
+                                        "Hospitalized",     # 4 - Treated and Admitted/Hospitalized
+                                        "Hospitalized",     # 5 - Held for Observation
+                                        "Released",         # 6 - Left Without Being Seen
+                                        "Fatality",         # 8 - Fatality, Incl. DOA, Died in ER
+                                        "Unknown"))         # 9 - Unknown, Not Stated
+
+# Verify the changes
+table(NEISS$Disposition)
+
+# Create a table with count and percentage for Disposition in the NEISS dataset
+disposition_distribution <- NEISS %>%
+  group_by(Disposition) %>%                       # Group by Disposition
+  summarise(Count = n(), .groups = 'drop') %>%    # Count occurrences
+  mutate(Percentage = (Count / sum(Count)) * 100) %>%  # Calculate percentage
+  arrange(desc(Count))                            # Sort by count in descending order
+
+# Display the Disposition table
+print(disposition_distribution)
+```
+
+```{r}
+NEISS$Location<-as.factor(NEISS$Location)
+# Replace Location values with descriptive names
+NEISS$Location <- factor(NEISS$Location, 
+                         levels = c(0, 1, 2, 4, 5, 6, 7, 8, 9),
+                         labels = c("Not Recorded", "Home", "Workplace", "Public", 
+                                    "Public", "Public", 
+                                    "Workplace", "School/Daycare", "Place of Recreation or Sports"))
+
+# Plot the distribution of Location with descriptive labels
+ggplot(NEISS, aes(x = Location, fill = Location)) +
+  geom_bar() +
+  labs(title = "Distribution of Location in NEISS Dataset", x = "Location", y = "Count") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set3") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Create a table with count and percentage for Location in the entire NEISS dataset
+location_distribution_NEISS <- NEISS %>%
+  group_by(Location) %>%                         # Group by Location
+  summarise(Count = n(), .groups = 'drop') %>%   # Count occurrences
+  mutate(Percentage = (Count / sum(Count)) * 100) %>%  # Calculate percentage
+  arrange(desc(Count))                           # Sort by count in descending order
+
+# Display the Location table for the entire dataset
+print(location_distribution_NEISS)
+```
+```{r}
+# Group and decode the Fire_Involvement column
+NEISS$Fire_Involvement <- factor(NEISS$Fire_Involvement,
+                                  levels = c(0, 1, 2, 3),
+                                  labels = c("No",    # 0 - No Fire Involved or Fire Involvement Not Recorded
+                                             "Yes",   # 1 - Fire Involved and Fire Department Attended
+                                             "Yes",   # 2 - Fire Involved and Fire Department Did Not Attend
+                                             "Yes"))  # 3 - Fire Involved and Unknown Fire Department Attendance
+
+# Verify the changes
+table(NEISS$Fire_Involvement)
+
+```
+
+```{r}
+
+# Create a table with count and percentage for Product_1 in the NEISS dataset
+product_distribution <- NEISS %>%
+  group_by(Product_1) %>%                       # Group by Product_1
+  summarise(Count = n(), .groups = 'drop') %>%  # Count occurrences
+  mutate(Percentage = (Count / sum(Count)) * 100) %>%  # Calculate percentage
+  arrange(desc(Count))                          # Sort by count in descending order
+
+# Display the Product_1 table
+print(product_distribution)
+
+```
+```{r}
+# Count the frequency of each Body_Part
+body_part_counts <- table(NEISS$Body_Part)
+
+# Sort the counts in descending order and get the top 10
+top_10_body_part <- head(sort(body_part_counts, decreasing = TRUE), 10)
+
+# Convert to a data frame for plotting
+top_10_df <- as.data.frame(top_10_body_part)
+
+# Plot the top 10 Body_Part categories
+ggplot(top_10_df, aes(x = reorder(Var1, Freq), y = Freq, fill = Var1)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 10 Body Parts in NEISS Dataset", x = "Body Part", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +  # Rotate x-axis labels for readability
+  scale_fill_brewer(palette = "Set3")
+
+# Create a table with count and percentage for Body_Part in the NEISS dataset
+body_part_distribution <- NEISS %>%
+  group_by(Body_Part) %>%                       # Group by Body_Part
+  summarise(Count = n(), .groups = 'drop') %>%  # Count occurrences
+  mutate(Percentage = (Count / sum(Count)) * 100) %>%  # Calculate percentage
+  arrange(desc(Count))                          # Sort by count in descending order
+
+# Display the Body_Part table
+print(body_part_distribution)
+```
+
+```{r}
+# Count the frequency of each Diagnosis
+diagnosis_counts <- table(NEISS$Diagnosis)
+
+# Sort the counts in descending order and get the top 10
+top_10_diagnosis <- head(sort(diagnosis_counts, decreasing = TRUE), 10)
+
+# Convert to a data frame for plotting
+top_10_diagnosis_df <- as.data.frame(top_10_diagnosis)
+
+# Plot the top 10 Diagnosis categories
+ggplot(top_10_diagnosis_df, aes(x = reorder(Var1, Freq), y = Freq, fill = Var1)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 10 Diagnoses in NEISS Dataset", x = "Diagnosis", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +  # Rotate x-axis labels for readability
+  scale_fill_brewer(palette = "Set3")
+
+# Create a table with count and percentage for Diagnosis in the NEISS dataset
+diagnosis_distribution <- NEISS %>%
+  group_by(Diagnosis) %>%                       # Group by Diagnosis
+  summarise(Count = n(), .groups = 'drop') %>%  # Count occurrences
+  mutate(Percentage = (Count / sum(Count)) * 100) %>%  # Calculate percentage
+  arrange(desc(Count))                          # Sort by count in descending order
+
+# Display the Diagnosis table
+print(diagnosis_distribution)
+
+```
+
+
+
+
+```{r}
+
+# Create the frequency matrix
+frequency_matrix <- NEISS %>%
+  count(Body_Part, Diagnosis) %>%         # Count occurrences of each Body_Part and Diagnosis combination
+  pivot_wider(names_from = Diagnosis,     # Make Diagnosis the column names
+              values_from = n,            # Fill with the counts
+              values_fill = list(n = 0))  # Replace NA with 0 for missing combinations
+
+# View the resulting matrix
+print(frequency_matrix)
+
+```
+
+```{r}
+
+# Create the frequency matrix
+frequency_matrix2 <- NEISS %>%
+  count(Body_Part_2, Diagnosis_2) %>%         # Count occurrences of each Body_Part_2 and Diagnosis_2 combination
+  pivot_wider(names_from = Diagnosis_2,     # Make Diagnosis the column names
+              values_from = n,            # Fill with the counts
+              values_fill = list(n = 0))  # Replace NA with 0 for missing combinations
+
+# View the resulting matrix
+print(frequency_matrix2)
+
+```
+
+```{r}
+# Create the frequency matrix between Diagnosis and Dispositon
+frequency_matrix3 <- NEISS %>%
+  count(Disposition, Diagnosis) %>%         # Count occurrences of each Disposition and Diagnosis combination
+  pivot_wider(names_from = Diagnosis,     # Make Diagnosis the column names
+              values_from = n,            # Fill with the counts
+              values_fill = list(n = 0))  # Replace NA with 0 for missing combinations
+
+# View the resulting matrix
+print(frequency_matrix3)
+```
+```{r}
+# Create the frequency matrix between Body_Part and Dispositon
+frequency_matrix4 <- NEISS %>%
+  count(Body_Part, Disposition) %>%         # Count occurrences of each Body_Part and Disposition combination
+  pivot_wider(names_from = Disposition,     # Make Disposition the column names
+              values_from = n,            # Fill with the counts
+              values_fill = list(n = 0))  # Replace NA with 0 for missing combinations
+
+# View the resulting matrix
+print(frequency_matrix4)
+```
+```{r}
+# Create the frequency matrix between Product_1 and Diagnosis
+frequency_matrix5 <- NEISS %>%
+  count(Product_1, Diagnosis) %>%         # Count occurrences of each Body_Part_2 and Diagnosis_2 combination
+  pivot_wider(names_from = Diagnosis,     # Make Diagnosis the column names
+              values_from = n,            # Fill with the counts
+              values_fill = list(n = 0))  # Replace NA with 0 for missing combinations
+
+# View the resulting matrix
+print(frequency_matrix5)
+
+```
+
+```{r}
+# Create the frequency matrix between Product_1 and Diagnosis
+frequency_matrix6 <- NEISS %>%
+  count(Sex, Diagnosis) %>%         # Count occurrences of each Gender and Diagnosis combination
+  pivot_wider(names_from = Diagnosis,     # Make Diagnosis the column names
+              values_from = n,            # Fill with the counts
+              values_fill = list(n = 0))  # Replace NA with 0 for missing combinations
+
+# View the resulting matrix
+print(frequency_matrix6)
+```
+
+```{r}
+# Create the frequency matrix between Product_1 and Diagnosis
+frequency_matrix7 <- NEISS %>%
+  count(Age, Diagnosis) %>%         # Count occurrences of each Age and Diagnosis combination
+  pivot_wider(names_from = Diagnosis,     # Make Diagnosis the column names
+              values_from = n,            # Fill with the counts
+              values_fill = list(n = 0))  # Replace NA with 0 for missing combinations
+
+# View the resulting matrix
+print(frequency_matrix7)
+```
+
+
+```{r}
+# Create a new variable 'BodyGroup' by grouping values based on Body_Part codes
+NEISS <- NEISS %>%
+  mutate(BodyGroup = case_when(
+    Body_Part == 75 ~ "Head",
+    Body_Part %in% c(76, 77, 88, 94) ~ "Face",
+    Body_Part %in% c(36, 33, 81, 80, 32) ~ "Arm & Leg",
+    Body_Part %in% c(79, 31, 30, 89) ~ "Trunk",
+    Body_Part %in% c(92, 82, 34) ~ "Hand",
+    Body_Part %in% c(83, 93) ~ "Foot",
+    Body_Part %in% c(35, 37) ~ "Knee & Ankle",
+    Body_Part %in% c(85, 38, 84, 87, 0) ~ "Others",
+    TRUE ~ "Unknown"  # Default for any other codes not specified
+  ))
+
+# Create a frequency table for BodyGroup
+bodygroup_table <- table(NEISS$BodyGroup)
+
+# Convert the table to a data frame and calculate percentages
+bodygroup_percentage <- as.data.frame(bodygroup_table) %>%
+  rename(BodyGroup = Var1, Count = Freq) %>%
+  mutate(Percentage = (Count / sum(Count)) * 100)
+
+# Display the frequency table with percentages
+print(bodygroup_percentage)
+
+# Reorder BodyGroup based on the count and create the plot
+ggplot(NEISS, aes(x = reorder(BodyGroup, table(BodyGroup)[BodyGroup]), fill = BodyGroup)) +
+  geom_bar() +
+  labs(title = "Distribution of Body Groups in NEISS Dataset", 
+       x = "Body Group", 
+       y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +  # Rotate x-axis labels for readability
+  scale_fill_brewer(palette = "Set3")
+
+
+```
+
+```{r}
+# Create the frequency matrix between Product_1 and Diagnosis
+bodygroup_matrix <- NEISS %>%
+  count(BodyGroup, Diagnosis) %>%         # Count occurrences of each Body_Part_2 and Diagnosis_2 combination
+  pivot_wider(names_from = Diagnosis,     # Make Diagnosis the column names
+              values_from = n,            # Fill with the counts
+              values_fill = list(n = 0))  # Replace NA with 0 for missing combinations
+
+NEISS$BodyGroup<-as.factor(NEISS$BodyGroup)
+
+# View the resulting matrix
+print(bodygroup_matrix)
+```
+
+```{r}
+# Frequency table for Top 20 values in Product_1 with percentage
+product_1_table <- NEISS %>%
+  group_by(Product_1) %>%                            # Group by Product_1
+  summarise(Count = n(), .groups = 'drop') %>%       # Count occurrences
+  mutate(Percentage = (Count / sum(Count)) * 100) %>%# Calculate percentage
+  arrange(desc(Count)) %>%                           # Sort by count in descending order
+  slice_head(n = 20)                                 # Select top 20
+
+# Frequency table for Top 20 values in Product_2 with percentage
+product_2_table <- NEISS %>%
+  group_by(Product_2) %>%                            # Group by Product_2
+  summarise(Count = n(), .groups = 'drop') %>%       # Count occurrences
+  mutate(Percentage = (Count / sum(Count)) * 100) %>%# Calculate percentage
+  arrange(desc(Count)) %>%                           # Sort by count in descending order
+  slice_head(n = 20)                                 # Select top 20
+
+# Frequency table for Top 20 values in Product_3 with percentage
+product_3_table <- NEISS %>%
+  group_by(Product_3) %>%                            # Group by Product_3
+  summarise(Count = n(), .groups = 'drop') %>%       # Count occurrences
+  mutate(Percentage = (Count / sum(Count)) * 100) %>%# Calculate percentage
+  arrange(desc(Count)) %>%                           # Sort by count in descending order
+  slice_head(n = 20)                                 # Select top 20
+
+# Display the frequency tables
+print(product_1_table)
+print(product_2_table)
+print(product_3_table)
+
+```
+```{r}
+# Frequency table for Body_Part_2 with percentage
+body_part_2_table <- NEISS %>%
+  group_by(Body_Part_2) %>%                          # Group by Body_Part_2
+  summarise(Count = n(), .groups = 'drop') %>%       # Count occurrences
+  mutate(Percentage = (Count / sum(Count)) * 100) %>%# Calculate percentage
+  arrange(desc(Count))                               # Sort by count in descending order
+
+# Display the Body_Part_2 frequency table with percentage
+print(body_part_2_table)
+
+# Frequency table for Diagnosis_2 with percentage
+diagnosis_2_table <- NEISS %>%
+  group_by(Diagnosis_2) %>%                          # Group by Diagnosis_2
+  summarise(Count = n(), .groups = 'drop') %>%       # Count occurrences
+  mutate(Percentage = (Count / sum(Count)) * 100) %>%# Calculate percentage
+  arrange(desc(Count))                               # Sort by count in descending order
+
+# Display the Diagnosis_2 frequency table with percentage
+print(diagnosis_2_table)
+
+```
+
+
+```{r}
+# Count cases where Fire_Invovement = 0, Alcohol = 0, and Drug = 0
+no_fire_alcohol_drug_cases <- NEISS %>%
+  filter(Fire_Involvement == "No", Alcohol == 0, Drug == 0) %>%  # Filter rows where all conditions are met
+  summarise(Count = n())                                     # Count the number of rows
+
+# Display the result
+print(no_fire_alcohol_drug_cases)
+```
+
+
+
+
+
+```{r}
+# Create a frequency matrix between AgeGroup and Body_Part
+age_body_matrix <- NEISS %>%
+  count(Body_Part,AgeGroup) %>%                  # Count occurrences of each AgeGroup and Body_Part combination
+  pivot_wider(names_from = AgeGroup,             # Make Body_Part the column names
+              values_from = n,                    # Fill with the counts
+              values_fill = list(n = 0))          # Replace NA with 0 for missing combinations
+
+# View the resulting matrix
+print(age_body_matrix)
+
+```
+
+```{r}
+# Create a frequency matrix between AgeGroup and Diagnosis
+age_dig_matrix2 <- NEISS %>%
+  count(AgeGroup,Diagnosis) %>%       
+  pivot_wider(names_from = Diagnosis,            
+              values_from = n,                    
+              values_fill = list(n = 0))          
+
+# View the resulting matrix
+print(age_dig_matrix2)
+```
+```{r}
+# Create a frequency matrix between BodyGroup and AgeGroup
+agegr_bodygr_matrix <- NEISS %>%
+  count(BodyGroup, AgeGroup) %>%          
+  pivot_wider(names_from = AgeGroup,             
+              values_from = n,                    
+              values_fill = list(n = 0))          
+
+# View the resulting matrix
+print(agegr_bodygr_matrix)
+```
+
+```{r}
+# Create a frequency matrix between Sex and Diagnosis
+sex_dig_matrix <- NEISS %>%
+  count(Sex,Diagnosis) %>%              
+  pivot_wider(names_from = Diagnosis,           
+              values_from = n,                   
+              values_fill = list(n = 0))          
+
+# View the resulting matrix
+print(sex_dig_matrix)
+```
+
+```{r}
+# Create a frequency matrix between Body_Part and Sex
+body_sex_matrix <- NEISS %>%
+  count(Body_Part,Sex) %>%                  
+  pivot_wider(names_from = Sex,             
+              values_from = n,                   
+              values_fill = list(n = 0))          
+
+# View the resulting matrix
+print(body_sex_matrix)
+```
+
+```{r}
+
+# Filter top 5 body parts for each AgeGroup
+top_body_parts <- NEISS %>%
+  group_by(AgeGroup, Body_Part) %>%      # Group by AgeGroup and BodyPart
+  summarise(Count = n(), .groups = 'drop') %>%  # Count occurrences for each body part in each age group
+  arrange(AgeGroup, desc(Count)) %>%    # Sort within each age group by count
+  group_by(AgeGroup) %>%
+  slice_max(Count, n = 5)              # Select top 5 for each age group
+
+# Calculate total counts for each body part across all age groups
+total_body_part_counts <- top_body_parts %>%
+  group_by(Body_Part) %>%
+  summarise(Total_Count = sum(Count), .groups = 'drop') %>%  # Total counts for each body part
+  arrange(desc(Total_Count))   # Sort by total count
+
+# Create a factor for Body_Part based on total counts for sorting in the plot
+top_body_parts <- top_body_parts %>%
+  mutate(Body_Part = factor(Body_Part, levels = total_body_part_counts$Body_Part))
+
+# Plot the data with body parts sorted by total count across all age groups
+ggplot(top_body_parts, aes(x = Body_Part, y = Count, fill = AgeGroup)) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~ AgeGroup, scales = "free_y") +  # Separate plot for each AgeGroup
+  labs(title = "Top 10 Injured Body Parts by Age Group",
+       x = "Body Part", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  coord_flip()  # Flip coordinates for better readability
+
+```
+
+```{r}
+# Create a table with count and percentage for Location in the whole NEISS dataset
+location_distribution <- NEISS %>%
+  group_by(Location) %>%                       # Group by Location
+  summarise(Count = n(), .groups = 'drop') %>%  # Count occurrences
+  mutate(Percentage = (Count / sum(Count)) * 100) %>%  # Calculate percentage
+  arrange(desc(Count))                          # Sort by count in descending order
+
+# Display the Location table
+print(location_distribution)
+
+# Filter top 5 locations for each AgeGroup
+top_locations <- NEISS %>%
+  group_by(AgeGroup, Location) %>%      # Group by AgeGroup and Location
+  summarise(Count = n(), .groups = 'drop') %>%  # Count occurrences for each location in each age group
+  arrange(AgeGroup, desc(Count)) %>%    # Sort within each age group by count
+  group_by(AgeGroup) %>%
+  slice_max(Count, n = 5)               # Select top 5 for each age group
+
+# Create a matrix or table of the top 5 locations for each AgeGroup
+location_matrix <- top_locations %>%
+  spread(key = AgeGroup, value = Count, fill = 0) %>%
+  arrange(desc(Location))  # Arrange by location for better readability
+
+# Print the location matrix
+print(location_matrix)
+
+```
+```{r}
+
+# Create a pie chart for Location distribution within each AgeGroup
+ggplot(NEISS %>%
+         group_by(AgeGroup, Location) %>%              # Group by AgeGroup and Location
+         summarise(Count = n(), .groups = 'drop') %>%  # Count occurrences
+         mutate(Percentage = (Count / sum(Count)) * 100),  # Calculate percentage
+       aes(x = "", y = Percentage, fill = Location)) +  # X = "", creates a single segment pie chart
+  geom_bar(stat = "identity", width = 1) +             # Create pie chart with bars
+  coord_polar(theta = "y") +                           # Transform into pie chart
+  facet_wrap(~ AgeGroup) +                             # Create separate pie chart for each AgeGroup
+  labs(title = "Location Distribution by Age Group",
+       fill = "Location") +
+  theme_minimal() +
+  theme(axis.text.x = element_blank(),                # Remove axis labels
+        axis.ticks = element_blank())                  # Remove axis ticks
+
+```
+```{r}
+
+# Calculate the distribution and percentage for each Location in each AgeGroup
+location_distribution <- NEISS %>%
+  group_by(AgeGroup, Location) %>%              # Group by AgeGroup and Location
+  summarise(Count = n(), .groups = 'drop') %>%  # Count occurrences
+  mutate(Percentage = (Count / sum(Count)) * 100) # Calculate percentage
+
+# Get the highest frequency Location for each AgeGroup
+highest_location_per_agegroup <- location_distribution %>%
+  group_by(AgeGroup) %>%                     # Group by AgeGroup
+  filter(Percentage == max(Percentage)) %>%    # Filter for highest percentage within each AgeGroup
+  ungroup()
+
+# Display the highest frequency Location and its percentage for each AgeGroup
+print(highest_location_per_agegroup)
+
+# You can also visualize the highest frequency Location per AgeGroup (optional)
+ggplot(highest_location_per_agegroup, aes(x = AgeGroup, y = Percentage, fill = Location)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Highest Frequency Location per Age Group",
+       x = "Age Group", y = "Percentage") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set3")
+
+```
+
+```{r}
+# Modify the NEISS dataset
+NEISS <- NEISS %>%
+  mutate(DiagGroup = case_when(
+    Diagnosis %in% c(57) ~ "Fracture",
+    Diagnosis %in% c(67,68,69,74,41,42,56,63,59) ~ "Foreign",
+    Diagnosis %in% c(55,52,50,54,72,58,66,60,64) ~ "Trauma",
+    Diagnosis %in% c(61,62,65,53) ~ "Internal",
+    TRUE ~ "Other"
+  ))
+
+# View the result
+NEISS$DiagGroup <- as.factor(NEISS$DiagGroup)
+summary(NEISS)
+```
+
+```{r}
+
+# Create a frequency table of DiagGroup
+DiagGroup_freq <- NEISS %>%
+  count(DiagGroup)
+
+print(DiagGroup_freq)
+
+# Plot the frequency of each DiagGroup category
+ggplot(DiagGroup_freq, aes(x = reorder(DiagGroup, n), y = n)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  coord_flip() +
+  labs(title = "Frequency of DiagGroup Categories in NEISS Dataset",
+       x = "DiagGroup",
+       y = "Frequency") +
+  theme_minimal()
+
+```
+```{r}
+# Create a frequency matrix for DiagGroup and AgeGroup
+diag_age_matrix <- NEISS %>%
+  group_by(AgeGroup, DiagGroup) %>%            # Group by DiagGroup and AgeGroup
+  summarise(Frequency = n(), .groups = "drop") %>%  # Count occurrences
+  pivot_wider(names_from = DiagGroup, values_from = Frequency, values_fill = 0)  # Reshape to a wide format
+
+# Display the frequency matrix
+print(diag_age_matrix)
+
+```
+```{r}
+# Create a frequency matrix for DiagGroup and BodyGroup
+diag_body_matrix <- NEISS %>%
+  group_by(BodyGroup, DiagGroup) %>%            # Group by DiagGroup and AgeGroup
+  summarise(Frequency = n(), .groups = "drop") %>%  # Count occurrences
+  pivot_wider(names_from = DiagGroup, values_from = Frequency, values_fill = 0)  # Reshape to a wide format
+
+# Display the frequency matrix
+print(diag_body_matrix)
+
+```
+
+
+```{r}
+# Step 1: Find the Top 10 products for each AgeGroup
+top_10_products_agegroup <- NEISS %>%
+  group_by(AgeGroup, Product_1) %>%         # Group by AgeGroup and Product_1
+  summarise(Count = n(), .groups = "drop") %>%  # Count occurrences
+  arrange(AgeGroup, desc(Count)) %>%       # Sort by AgeGroup and descending Count
+  group_by(AgeGroup) %>%                   # Group by AgeGroup again
+  slice_max(Count, n = 10)                 # Select top 10 products for each AgeGroup
+
+# Step 2: Extract the Top 10 products for all AgeGroups
+agegroup_top_10 <- top_10_products_agegroup %>% pull(Product_1)
+
+# Step 3: Create a frequency matrix based on these Top 10 products for AgeGroup
+frequency_matrix_agegroup <- NEISS %>%
+  filter(Product_1 %in% agegroup_top_10) %>%  # Filter only the Top 10 products
+  group_by(AgeGroup, Product_1) %>%           # Group by AgeGroup and Product_1
+  summarise(Count = n(), .groups = "drop") %>%  # Count occurrences
+  pivot_wider(names_from = AgeGroup, values_from = Count, values_fill = list(Count = 0)) %>%  # Reshape the data
+  arrange(Product_1)  # Sort by Product_1
+
+# Display the frequency matrix
+print(frequency_matrix_agegroup)
+```
+```{r}
+# Step 1: Find the Top 10 products for each BodyGroup
+top_10_products_bodygroup <- NEISS %>%
+  group_by(BodyGroup, Product_1) %>%          # Group by BodyGroup and Product_1
+  summarise(Count = n(), .groups = "drop") %>% # Count occurrences
+  arrange(BodyGroup, desc(Count)) %>%         # Sort by BodyGroup and descending Count
+  group_by(BodyGroup) %>%                     # Group by BodyGroup again
+  slice_max(Count, n = 10)                    # Select top 10 products for each BodyGroup
+
+# Step 2: Extract the Top 10 products for all BodyGroups
+bodygroup_top_10 <- top_10_products_bodygroup %>% pull(Product_1)
+
+# Step 3: Create a frequency matrix based on these Top 10 products for BodyGroup
+frequency_matrix_bodygroup <- NEISS %>%
+  filter(Product_1 %in% bodygroup_top_10) %>% # Filter only the Top 10 products
+  group_by(BodyGroup, Product_1) %>%         # Group by BodyGroup and Product_1
+  summarise(Count = n(), .groups = "drop") %>% # Count occurrences
+  pivot_wider(names_from = BodyGroup, values_from = Count, values_fill = list(Count = 0)) %>% # Reshape data
+  arrange(Product_1)  # Sort by Product_1
+
+# Display the frequency matrix
+print(frequency_matrix_bodygroup)
+
+```
+
+```{r}
+# Step 1: Find the Top 10 products for each DiagGroup
+top_10_products_diaggroup <- NEISS %>%
+  group_by(DiagGroup, Product_1) %>%          # Group by DiagGroup and Product_1
+  summarise(Count = n(), .groups = "drop") %>% # Count occurrences
+  arrange(DiagGroup, desc(Count)) %>%         # Sort by DiagGroup and descending Count
+  group_by(DiagGroup) %>%                     # Group by DiagGroup again
+  slice_max(Count, n = 10)                    # Select top 10 products for each DiagGroup
+
+# Step 2: Extract the Top 10 products for all DiagGroups
+diaggroup_top_10 <- top_10_products_diaggroup %>% pull(Product_1)
+
+# Step 3: Create a frequency matrix based on these Top 10 products for DiagGroup
+frequency_matrix_diaggroup <- NEISS %>%
+  filter(Product_1 %in% diaggroup_top_10) %>% # Filter only the Top 10 products
+  group_by(DiagGroup, Product_1) %>%         # Group by DiagGroup and Product_1
+  summarise(Count = n(), .groups = "drop") %>% # Count occurrences
+  pivot_wider(names_from = DiagGroup, values_from = Count, values_fill = list(Count = 0)) %>% # Reshape data
+  arrange(Product_1)  # Sort by Product_1
+
+# Display the frequency matrix
+print(frequency_matrix_diaggroup)
+
+
+```
+
+```{r}
+# Step 1: Find the Top 10 products for Male and Female
+top_10_products_sex <- NEISS %>%
+  group_by(Sex, Product_1) %>%             # Group by Sex and Product_1
+  summarise(Count = n(), .groups = "drop") %>%  # Count occurrences
+  arrange(Sex, desc(Count)) %>%            # Sort by Sex and descending Count
+  group_by(Sex) %>%                        # Group by Sex again
+  slice_max(Count, n = 10)                 # Select top 10 products for each Sex
+
+# Step 2: Extract the Top 10 products for Male and Female
+male_top_10 <- top_10_products_sex %>% filter(Sex == "Male")
+female_top_10 <- top_10_products_sex %>% filter(Sex == "Female")
+
+# Combine the Male and Female Top 10 products into a list of unique products
+top_10_products <- unique(c(male_top_10$Product_1, female_top_10$Product_1))
+
+# Step 3: Create a frequency matrix based on these Top 10 products
+frequency_matrix <- NEISS %>%
+  filter(Product_1 %in% top_10_products) %>%  # Filter only the Top 10 products
+  group_by(Sex, Product_1) %>%                # Group by Sex and Product_1
+  summarise(Count = n(), .groups = "drop") %>% # Count occurrences
+  pivot_wider(names_from = Sex, values_from = Count, values_fill = list(Count = 0)) %>%  # Reshape the data
+  arrange(Product_1)  # Sort by Product_1
+
+# Display the frequency matrix
+print(frequency_matrix)
+
+```
+```{r}
+# Step 1: Find the Top 10 products for each Race
+top_10_products_race <- NEISS %>%
+  group_by(Race, Product_1) %>%              # Group by Race and Product_1
+  summarise(Count = n(), .groups = "drop") %>%  # Count occurrences
+  arrange(Race, desc(Count)) %>%             # Sort by Race and descending Count
+  group_by(Race) %>%                         # Group by Race again
+  slice_max(Count, n = 10)                   # Select top 10 products for each Race
+
+# Step 2: Extract the Top 10 products for all Races
+race_top_10 <- top_10_products_race %>% pull(Product_1)
+
+# Step 3: Create a frequency matrix based on these Top 10 products for Race
+frequency_matrix_race <- NEISS %>%
+  filter(Product_1 %in% race_top_10) %>%  # Filter only the Top 10 products
+  group_by(Race, Product_1) %>%           # Group by Race and Product_1
+  summarise(Count = n(), .groups = "drop") %>%  # Count occurrences
+  pivot_wider(names_from = Race, values_from = Count, values_fill = list(Count = 0)) %>%  # Reshape the data
+  arrange(Product_1)  # Sort by Product_1
+
+# Display the frequency matrix
+print(frequency_matrix_race)
+
+```
+```{r}
+# Proportion of Injuries by Gender Across Age Groups
+# Calculate proportions of injuries by gender within each AgeGroup
+gender_age_group <- NEISS %>%
+  group_by(AgeGroup, Sex) %>%
+  summarise(Count = n(), .groups = "drop") %>%
+  mutate(Proportion = Count / sum(Count) * 100)
+
+# Stacked bar chart for proportion of injuries by gender and age group
+ggplot(gender_age_group, aes(x = AgeGroup, y = Proportion, fill = Sex)) +
+  geom_bar(stat = "identity", position = "stack") +
+  labs(title = "Proportion of Injuries by Gender Across Age Groups", 
+       x = "Age Group", y = "Proportion (%)") +
+  scale_fill_manual(values = c("Male" = "blue", "Female" = "pink")) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+```{r}
+# Most Common Injuries by Diagnosis for Each Location
+# Find the most common diagnosis for each location
+common_diagnosis_by_location <- NEISS %>%
+  group_by(Location, DiagGroup) %>%
+  summarise(Count = n(), .groups = "drop") %>%
+  arrange(Location, desc(Count)) %>%
+  group_by(Location) %>%
+  slice_max(Count, n = 1)  # Select the top diagnosis for each location
+
+# Bar plot for the most common diagnosis by location
+ggplot(common_diagnosis_by_location, aes(x = reorder(Location, -Count), y = Count, fill = DiagGroup)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Most Common Diagnoses by Location", x = "Location", y = "Count") +
+  scale_fill_brewer(palette = "Set3") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+```{r}
+# Step 1: Reshape the data for plotting
+frequency_data <- frequency_matrix %>%
+  pivot_longer(cols = -Product_1, names_to = "Sex", values_to = "Count")  # Convert Male and Female columns into rows
+
+# Step 2: Create the grouped bar plot
+ggplot(frequency_data, aes(x = reorder(Product_1, -Count), y = Count, fill = Sex)) +
+  geom_bar(stat = "identity", position = "dodge") +  # Use dodge for grouped bars
+  labs(
+    title = "Frequency of Top 10 Products by Sex",
+    x = "Product Code",
+    y = "Count"
+  ) +
+  scale_fill_manual(values = c("Male" = "skyblue", "Female" = "pink")) +  # Set custom colors
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for clarity
+  )
+
+```
+
+
+```{r}
+# Create the Multi_Injuries variable
+NEISS$Multi_Injuries <- ifelse(is.na(NEISS$Body_Part_2), 0, 1)
+
+# Create the Multi_Products variable
+NEISS$Multi_Products <- ifelse(NEISS$Product_2 != 0 | NEISS$Product_3 != 0, 1, 0)
+
+NEISS$Multi_Injuries <- as.factor(NEISS$Multi_Injuries)
+NEISS$Multi_Products <- as.factor(NEISS$Multi_Products)
+
+# Create the Covid variable
+NEISS <- NEISS %>%
+  mutate(Covid = ifelse(Treatment_Date >= as.Date("2020-03-13") & Treatment_Date <= as.Date("2022-05-31"), 1, 0))
+
+NEISS$Covid <- as.factor(NEISS$Covid)
+
+# Load necessary package
+library(lubridate)
+
+# Create new variables for Day of the Week, Month, and Year
+NEISS <- NEISS %>%
+  mutate(
+    Day = wday(Treatment_Date, label = TRUE, abbr = FALSE), # Day of the week
+    Month = month(Treatment_Date, label = TRUE, abbr = FALSE),     # Month
+    Year = year(Treatment_Date)                                    # Year
+  )
+
+# View the updated dataset
+summary(NEISS)
+```
+```{r}
+library(ggplot2)
+
+# Plot distribution for Day_of_Week
+ggplot(NEISS, aes(x = Day)) +
+  geom_bar(fill = "skyblue") +
+  labs(title = "Distribution of Injuries by Day of the Week",
+       x = "Day of the Week", y = "Count") +
+  theme_minimal()
+
+# Plot distribution for Month
+ggplot(NEISS, aes(x = Month)) +
+  geom_bar(fill = "lightgreen") +
+  labs(title = "Distribution of Injuries by Month",
+       x = "Month", y = "Count") +
+  theme_minimal()
+
+# Plot distribution for Year
+ggplot(NEISS, aes(x = Year)) +
+  geom_bar(fill = "salmon") +
+  labs(title = "Distribution of Injuries by Year",
+       x = "Year", y = "Count") +
+  theme_minimal()
+
+```
+```{r}
+# Assuming 'Day' is a character or factor column in the dataset
+NEISS$Weekend <- ifelse(NEISS$Day %in% c("Saturday", "Sunday"), 1, 0)
+
+# Check the result
+table(NEISS$Weekend)
+```
+
+
+```{r}
+# Write the NEISScleaned dataset to a CSV file
+write.csv(NEISS, "NEISScleaned.csv", row.names = FALSE)
+```
+

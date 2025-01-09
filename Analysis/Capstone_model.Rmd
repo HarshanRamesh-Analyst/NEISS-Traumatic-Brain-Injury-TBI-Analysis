@@ -1,0 +1,477 @@
+---
+title: "CapstoneModel"
+author: "Quang Nhut Ly"
+date: "2024-11-17"
+output: html_document
+---
+```{r}
+library(nnet)       # For multinomial logistic regression
+library(caret)      # For splitting data and evaluation
+library(dplyr)      # For data manipulation
+library(rpart)        # For decision tree
+library(rpart.plot)   # For plotting the tree
+library(randomForest) # For Random Forest
+```
+
+```{r}
+#Load the cleaned dataset
+NEISScleaned<-read.csv("D:/MERCER/Sem 3/Capstone/NEISScleaned.csv")
+View(NEISScleaned)
+summary(NEISScleaned)
+
+```
+
+```{r}
+
+# Convert specified variables to factor
+NEISScleaned <- NEISScleaned %>%
+  mutate(
+    Sex = as.factor(Sex),
+    Race = as.factor(Race),
+    Hispanic = as.factor(Hispanic),
+    Body_Part = as.factor(Body_Part),
+    Diagnosis = as.factor(Diagnosis),
+    Body_Part_2 = as.factor(Body_Part_2),
+    Diagnosis_2 = as.factor(Diagnosis_2),
+    Disposition = as.factor(Disposition),
+    Location = as.factor(Location),
+    Fire_Involvement = as.factor(Fire_Involvement),
+    Product_1 = as.factor(Product_1),
+    Product_2 = as.factor(Product_2),
+    Product_3 = as.factor(Product_3),
+    Alcohol = as.factor(Alcohol),
+    Drug = as.factor(Drug),
+    Covid = as.factor(Covid),
+    Day = as.factor(Day),
+    Month = as.factor(Month),
+    BodyGroup = as.factor(BodyGroup),
+    AgeGroup = as.factor(AgeGroup),
+    DiagGroup = as.factor(DiagGroup),
+    Multi_Injuries = as.factor(Multi_Injuries),
+    Multi_Products = as.factor(Multi_Products)
+    )
+
+#Convert Treatment Date to Date
+NEISScleaned$Treatment_Date <- as.Date(NEISScleaned$Treatment_Date) 
+
+# Remove specified columns from the NEISScleaned dataset
+NEISScleaned <- NEISScleaned %>%
+  select(-Other_Race, -Other_Diagnosis, -Other_Diagnosis_2, 
+         -Narrative_1, -Stratum, -PSU, -Weight)
+#summary
+summary(NEISScleaned)
+```
+
+```{r}
+# Create the Head variable
+NEISScleaned <- NEISScleaned %>%
+  mutate(Head = ifelse(Body_Part == 75, 1, 0))
+
+NEISScleaned$Head <- as.factor(NEISScleaned$Head)
+
+# Summary to confirm
+summary(NEISScleaned)
+```
+
+A. Partition
+```{r}
+
+# Set a desired sample size (100,000 observations)
+sample_size <- 100000
+
+# Sample the data stratified by BodyGroup
+set.seed(123) # For reproducibility
+NEISS_sample <- NEISScleaned %>%
+  group_by(BodyGroup) %>%
+  sample_frac(size = sample_size / nrow(NEISScleaned), replace = FALSE) %>%
+  ungroup()
+
+# Verify the sampled dataset
+nrow(NEISS_sample)
+
+#check Target variable categories
+summary(NEISS_sample$BodyGroup)
+summary(NEISS_sample$DiagGroup)
+summary(NEISS_sample$Disposition)
+```
+
+```{r}
+# Partition dataset into 60% of training and 40% of testing
+set.seed(123)
+train.index=sample(c(1:dim(NEISS_sample)[1]), dim(NEISS_sample)[1]*0.6)
+train_data  = NEISS_sample[train.index, ]
+test_data = NEISS_sample[-train.index, ]
+```
+
+##1. BodyGroup
+#Model 1: Multinomial Logistic Regression for BodyGroup
+
+```{r}
+#Build multinomial logistic regression model
+multinom_model<-multinom(BodyGroup ~ Age + Sex + Race + Hispanic + Location + DiagGroup + Fire_Involvement + Alcohol + Drug , data = train_data)
+
+#summary
+summary(multinom_model)
+
+# Predict on the test dataset
+test_predictions <- predict(multinom_model, newdata = test_data)
+
+# Confusion matrix to evaluate performance
+confusionMatrix(as.factor(test_predictions), as.factor(test_data$BodyGroup))
+
+# Calculate accuracy
+accuracy <- mean(test_predictions == test_data$BodyGroup)
+```
+
+
+#Model 2: Decision Tree for BodyGroup
+```{r}
+# Fit a decision tree model
+decision_tree <- rpart(BodyGroup ~ Age + Sex + Race + Hispanic + Location + DiagGroup + Fire_Involvement + Alcohol + Drug + Multi_Injuries + Multi_Products + Day + Month + Year  , data = train_data, method = "class")
+
+# Plot the decision tree
+rpart.plot(decision_tree, main = "Decision Tree for Body Part Injuries", type = 3, extra = 102)
+
+# Predict on the test dataset
+tree_predictions <- predict(decision_tree, newdata = test_data, type = "class")
+
+# Confusion matrix
+confusionMatrix(as.factor(tree_predictions), as.factor(test_data$BodyGroup))
+
+# Calculate accuracy
+tree_accuracy <- mean(tree_predictions == test_data$BodyGroup)
+```
+#Model 3: Random Forest for BodyGroup
+
+```{r}
+
+# Fit a random forest model
+set.seed(123)
+random_forest <- randomForest(BodyGroup ~ Age + Sex + Race + Hispanic + Location + DiagGroup + Fire_Involvement + Alcohol + Drug + Multi_Injuries + Multi_Products + Day + Month + Year, data = train_data, ntree=200, nodesize=25, importance = TRUE)
+
+# Summary of the model
+print(random_forest)
+
+# Predict on the test dataset
+rf_predicted <- predict(random_forest, newdata = test_data,  type = "class")
+
+# Evaluate model performance
+table(Predicted = rf_predicted, Actual = test_data$BodyGroup)
+
+# Confusion matrix
+confusionMatrix(as.factor(rf_predicted), as.factor(test_data$BodyGroup))
+
+```
+
+##2. DiagGroup
+#Model 1: Multinomial Logistic Regression
+
+```{r}
+#Build multinomial logistic regression model
+multinom_model2<-multinom(DiagGroup ~ Age + Sex + Race + Hispanic + Location + BodyGroup + Fire_Involvement + Alcohol + Drug, data = train_data)
+
+#summary
+summary(multinom_model2)
+
+# Predict on the test dataset
+test_predictions <- predict(multinom_model2, newdata = test_data)
+
+# Confusion matrix to evaluate performance
+confusionMatrix(as.factor(test_predictions), as.factor(test_data$DiagGroup))
+
+# Calculate accuracy
+accuracy <- mean(test_predictions == test_data$DiagGroup)
+```
+
+
+##Logistic Regression for Head Injury
+```{r}
+# Fit the logistic regression model
+log_model <- glm(Head~ Age + Sex + Race + Location + Hispanic + Fire_Involvement + Alcohol + Drug + Multi_Injuries + Multi_Products +Year +Month + Day + Covid,
+                 data = train_data, 
+                 family = binomial)
+
+# Display the summary of the model
+summary(log_model)
+
+# Predict probabilities on the test dataset
+predicted_prob <- predict(log_model, newdata = test_data, type = "response")
+
+# Convert probabilities to binary predictions (0 or 1)
+predicted5 <- ifelse(predicted_prob > 0.5, 1, 0)
+
+# Evaluate model performance using a confusion matrix
+library(caret) # Ensure you load this library for confusionMatrix
+table(Predicted = predicted5, Actual = test_data$Head)
+
+# Confusion matrix
+confusionMatrix(as.factor(predicted5), as.factor(test_data$Head))
+```
+
+#Balancing the Head dataset
+
+```{r}
+# Filter cases where Head = 1 and Head = 0
+head_1 <- NEISScleaned %>% filter(Head == 1)
+head_0 <- NEISScleaned %>% filter(Head == 0)
+
+# Randomly sample 50,000 cases from each group
+set.seed(123) # For reproducibility
+sample_head_1 <- head_1 %>% sample_n(50000)
+sample_head_0 <- head_0 %>% sample_n(50000)
+
+# Combine the balanced dataset
+NEISS_balanced <- bind_rows(sample_head_1, sample_head_0)
+
+# Shuffle the dataset to mix the cases
+NEISS_balanced <- NEISS_balanced %>% sample_frac(1)
+
+# Check the class distribution to confirm balance
+table(NEISS_balanced$Head)
+
+```
+```{r}
+# Partition the dataset into training and testing sets
+set.seed(123) # For reproducibility
+train_index <- createDataPartition(NEISS_balanced$Head, p = 0.6, list = FALSE)
+train_head <- NEISS_balanced[train_index, ]
+test_head <- NEISS_balanced[-train_index, ]
+
+# Build the logistic regression model
+log_model_balanced <- glm(Head ~ Age + Sex + Race + Location + Hispanic + 
+                   Fire_Involvement + Alcohol + Drug + Multi_Injuries + 
+                   Multi_Products + Year + Month + Day + Covid,
+                 family = binomial, data = train_head)
+
+# Summarize the model
+summary(log_model_balanced)
+
+# Predict on the test dataset
+predicted_probs <- predict(log_model_balanced, newdata = test_head, type = "response")
+predicted_classes <- ifelse(predicted_probs > 0.5, 1, 0)
+
+# Confusion matrix and model evaluation
+confusion <- table(Predicted = predicted_classes, Actual = test_head$Head)
+print(confusion)
+
+# Compute accuracy and other metrics
+confusion_metrics <- confusionMatrix(as.factor(predicted_classes), as.factor(test_head$Head))
+print(confusion_metrics)
+
+```
+##What is different in Each Age Group?
+#Break into 3 Set of Age (Younger, Adult and Senior)
+```{r}
+# Create Age Group categories for train and test data
+train_head$AgeGroup2 <- ifelse(train_head$Age < 18, "Younger", 
+                               ifelse(train_head$Age >= 18 & train_head$Age <= 50, "Adult", "Senior"))
+
+test_head$AgeGroup2 <- ifelse(test_head$Age < 18, "Younger", 
+                              ifelse(test_head$Age >= 18 & test_head$Age <= 50, "Adult", "Senior"))
+
+# Split train_data by AgeGroup
+train_head_younger <- subset(train_head, AgeGroup2 == "Younger")
+train_head_adult <- subset(train_head, AgeGroup2 == "Adult")
+train_head_senior <- subset(train_head, AgeGroup2 == "Senior")
+
+# Split test_data by AgeGroup
+test_head_younger <- subset(test_head, AgeGroup2 == "Younger")
+test_head_adult <- subset(test_head, AgeGroup2 == "Adult")
+test_head_senior <- subset(test_head, AgeGroup2 == "Senior")
+
+```
+
+#Younger dataset
+```{r}
+# Fit the logistic regression model
+log_model_younger <- glm(Head ~ Sex + Race + Location + Hispanic + Fire_Involvement + Alcohol + Drug + Multi_Injuries + Multi_Products +Year +Month + Day + Covid, 
+                 data = train_head_younger, 
+                 family = binomial)
+
+# Display the summary of the model
+summary(log_model_younger)
+
+# Predict probabilities on the test dataset
+predicted_prob <- predict(log_model_younger, newdata = test_head_younger, type = "response")
+
+# Convert probabilities to binary predictions (0 or 1)
+predicted5 <- ifelse(predicted_prob > 0.5, 1, 0)
+
+# Evaluate model performance using a confusion matrix
+table(Predicted = predicted5, Actual = test_head_younger$Head)
+
+# Confusion matrix
+confusionMatrix(as.factor(predicted5), as.factor(test_head_younger$Head))
+```
+
+#Senior Dataset
+```{r}
+# Fit the logistic regression model
+log_model_senior <- glm(Head ~ Sex + Race + Location + Hispanic + Fire_Involvement + Alcohol + Drug + Multi_Injuries + Multi_Products +Year +Month + Day + Covid, 
+                 data = train_head_senior, 
+                 family = binomial)
+
+# Display the summary of the model
+summary(log_model_senior)
+
+# Predict probabilities on the test dataset
+predicted_prob <- predict(log_model_senior, newdata = test_head_senior, type = "response")
+
+# Convert probabilities to binary predictions (0 or 1)
+predicted_senior <- ifelse(predicted_prob > 0.5, 1, 0)
+
+# Evaluate model performance using a confusion matrix
+table(Predicted = predicted_senior, Actual = test_head_senior$Head)
+
+# Confusion matrix
+confusionMatrix(as.factor(predicted_senior), as.factor(test_head_senior$Head))
+```
+
+#Adult
+```{r}
+# Fit the logistic regression model
+log_model_adult <- glm(Head ~ Sex + Race + Location + Hispanic + Fire_Involvement + Alcohol + Drug + Multi_Injuries + Multi_Products +Year + Month + Day + Covid, 
+                 data = train_head_adult, 
+                 family = binomial)
+
+# Display the summary of the model
+summary(log_model_adult)
+
+# Predict probabilities on the test dataset
+predicted_prob <- predict(log_model_adult, newdata = test_head_adult, type = "response")
+
+# Convert probabilities to binary predictions (0 or 1)
+predicted_adult <- ifelse(predicted_prob > 0.5, 1, 0)
+
+# Evaluate model performance using a confusion matrix
+table(Predicted = predicted_adult, Actual = test_head_adult$Head)
+
+# Confusion matrix
+confusionMatrix(as.factor(predicted_adult), as.factor(test_head_adult$Head))
+```
+#Multinomial Regression for Disposition
+
+
+```{r}
+#Build multinomial logistic regression model
+multinom_model3<-multinom(Disposition ~ Age + Sex + Race + Hispanic + Location + BodyGroup + DiagGroup + Fire_Involvement + Alcohol + Drug , data = train_data)
+
+#summary
+summary(multinom_model3)
+
+# Predict on the test dataset
+test_predictions <- predict(multinom_model3, newdata = test_data)
+
+# Confusion matrix to evaluate performance
+confusionMatrix(as.factor(test_predictions), as.factor(test_data$Disposition))
+
+# Calculate accuracy
+accuracy <- mean(test_predictions == test_data$Disposition)
+```
+```{r}
+#Create a new variable Head2 that takes the value 1 if Body_Part is one of the specified values (75, 94, 77, 76, 88), and 0 otherwise
+NEISScleaned <- NEISScleaned %>%
+  mutate(Head2 = ifelse(Body_Part %in% c(75, 94, 77, 76, 88), 1, 0))
+
+NEISScleaned$Head2 <-as.factor(NEISScleaned$Head2)
+
+summary(NEISScleaned)
+```
+
+```{r}
+# Filter cases where Head2 = 1 and Head2 = 0
+head2_1 <- NEISScleaned %>% filter(Head2 == 1)
+head2_0 <- NEISScleaned %>% filter(Head2 == 0)
+
+# Randomly sample 50,000 cases from each group
+set.seed(123) # For reproducibility
+sample_head2_1 <- head2_1 %>% sample_n(50000)
+sample_head2_0 <- head2_0 %>% sample_n(50000)
+
+# Combine the balanced dataset
+NEISS_balanced_head2 <- bind_rows(sample_head2_1, sample_head2_0)
+
+# Shuffle the dataset to mix the cases
+NEISS_balanced_head2 <- NEISS_balanced_head2 %>% sample_frac(1)
+
+# Check the class distribution to confirm balance
+table(NEISS_balanced_head2$Head2)
+
+# Partition the dataset into training (60%) and testing (40%) sets for Head2
+set.seed(123) # For reproducibility
+train_index <- createDataPartition(NEISS_balanced_head2$Head2, p = 0.6, list = FALSE)
+train_head2 <- NEISS_balanced_head2[train_index, ]
+test_head2 <- NEISS_balanced_head2[-train_index, ]
+
+# Build the logistic regression model on the training set
+log_model_head2 <- glm(Head2 ~ Age + Sex + Race + Location + Hispanic + 
+                   Fire_Involvement + Alcohol + Drug + Multi_Injuries + 
+                   Multi_Products + Year + Month + Day + Covid,
+                 family = binomial, data = train_head2)
+
+# Summarize the model
+summary(log_model_head2)
+
+# Predict probabilities and classes on the test dataset
+predicted_probs_head2 <- predict(log_model_head2, newdata = test_head2, type = "response")
+predicted_classes_head2 <- ifelse(predicted_probs_head2 > 0.5, 1, 0)
+
+# Create a confusion matrix
+confusion_head2 <- table(Predicted = predicted_classes_head2, Actual = test_head2$Head2)
+print(confusion_head2)
+
+# Compute model evaluation metrics
+confusion_metrics_head2 <- confusionMatrix(as.factor(predicted_classes_head2), as.factor(test_head2$Head2))
+print(confusion_metrics_head2)
+
+```
+```{r}
+# Create the new variable 'Internal'
+NEISScleaned$Internal <- ifelse(NEISScleaned$Diagnosis %in% c(61, 62, 65, 53), 1, 0)
+
+# Check the distribution of the new variable
+table(NEISScleaned$Internal)
+```
+
+```{r}
+# Balance the dataset for Internal
+internal_1 <- NEISScleaned %>% filter(Internal == 1)
+internal_0 <- NEISScleaned %>% filter(Internal == 0)
+
+# Randomly sample 50,000 cases from each group
+set.seed(123) # For reproducibility
+sample_internal_1 <- internal_1 %>% sample_n(50000)
+sample_internal_0 <- internal_0 %>% sample_n(50000)
+
+# Combine and shuffle the balanced dataset
+NEISS_balanced_internal <- bind_rows(sample_internal_1, sample_internal_0) %>% sample_frac(1)
+
+# Partition the dataset into training (60%) and testing (40%) sets
+set.seed(123) # For reproducibility
+train_index_internal <- createDataPartition(NEISS_balanced_internal$Internal, p = 0.6, list = FALSE)
+train_internal <- NEISS_balanced_internal[train_index_internal, ]
+test_internal <- NEISS_balanced_internal[-train_index_internal, ]
+
+# Build the logistic regression model
+log_model_internal <- glm(Internal ~ Age + Sex + Race + Location + Hispanic + 
+                           Fire_Involvement + Alcohol + Drug + Multi_Injuries + 
+                           Multi_Products + Year + Month + Day + Covid,
+                           family = binomial, data = train_internal)
+
+# Summarize the model
+summary(log_model_internal)
+
+# Predict on the test dataset
+predicted_probs_internal <- predict(log_model_internal, newdata = test_internal, type = "response")
+predicted_classes_internal <- ifelse(predicted_probs_internal > 0.5, 1, 0)
+
+# Confusion matrix and model evaluation
+confusion_internal <- table(Predicted = predicted_classes_internal, Actual = test_internal$Internal)
+print(confusion_internal)
+
+# Compute accuracy and other metrics
+confusion_metrics_internal <- confusionMatrix(as.factor(predicted_classes_internal), as.factor(test_internal$Internal))
+print(confusion_metrics_internal)
+
+```
+
