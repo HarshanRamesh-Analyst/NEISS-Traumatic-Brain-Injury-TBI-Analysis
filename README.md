@@ -1,5 +1,5 @@
 # NEISS Traumatic Brain Injury (TBI) Analysis
-![Alt text](Analysis/Images/TBI)
+![Alt text](Analysis/Images/TBI.jpg)
 ## Overview
 This project analyzes data from the National Electronic Injury Surveillance System (NEISS) to identify trends and risk factors for Traumatic Brain Injuries (TBIs) among elderly populations. The analysis focuses on head-related injuries and aims to develop actionable insights for reducing TBI incidents through targeted safety measures and predictive modeling.
 
